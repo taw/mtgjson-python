@@ -39,14 +39,16 @@ class MTGJSON:
         self.http_session = session
         self.sets_to_build = sets_to_build
 
-    async def get_card_html(self, card_mid: int, lookup_printed_text: bool = False) -> bs4.BeautifulSoup:
+    async def get_card_html(self, card_mid: int, lookup_printed_text: bool = False,
+                            set_name: str = '') -> bs4.BeautifulSoup:
         """
         Gets the card details (first page) of a single card
         :param card_mid: Multiverse ID of requested card
         :param lookup_printed_text: Do we want the original text, or oracle text?
+        :param set_name: Pass the setname down for cache purposes
         :return: Returns a BeautifulSoup object of the requested gatherer page.
         """
-        html = await mtg_http.get_card_details(self.http_session, card_mid, lookup_printed_text)
+        html = await mtg_http.get_card_details(self.http_session, card_mid, lookup_printed_text, set_name)
         soup = bs4.BeautifulSoup(html, 'html.parser')
         return soup
 
@@ -87,8 +89,8 @@ class MTGJSON:
 
         return layout, div_name, second_div_name, add_additional_card
 
-    async def build_foreign_info(self, soup: bs4.BeautifulSoup,
-                                 second_card: bool) -> List[mtg_global.ForeignNamesDescription]:
+    async def build_foreign_info(self, soup: bs4.BeautifulSoup, second_card: bool,
+                                 set_name: str) -> List[mtg_global.ForeignNamesDescription]:
         """
         Get the name and MID of this card for each other set it's printed in
         From there, we will get the foreign text/type for the user to decipher
@@ -108,7 +110,7 @@ class MTGJSON:
             card_language_name = table_rows[1].get_text(strip=True)
 
             # Download foreign URLs and append
-            soup_print = await self.get_card_html(foreign_mid, True)
+            soup_print = await self.get_card_html(foreign_mid, True, set_name)
 
             # Determine if Card is Normal, Flip, or Split
             div_name = self.determine_layout_and_div_name(soup_print, second_card)[1]
@@ -154,7 +156,7 @@ class MTGJSON:
 
         # Parse web page so we can gather all data from it
         card_mid = card_info['multiverseid']
-        soup_oracle = await self.get_card_html(int(str(card_mid)))
+        soup_oracle = await self.get_card_html(int(str(card_mid)), set_name=set_name[1])
 
         card_layout, div_name, alt_div_name, add_other_card = self.determine_layout_and_div_name(
             soup_oracle, second_card)
@@ -263,12 +265,13 @@ class MTGJSON:
         if c_variations:
             card_info['variations'] = c_variations
 
-    async def build_legalities_part(self, card_mid: int, card_info: mtg_global.CardDescription) -> None:
+    async def build_legalities_part(self, card_mid: int, card_info: mtg_global.CardDescription,
+                                    set_name: str = '') -> None:
         """
         This builder will build from the legalities page of Gatherer
         """
         try:
-            html = await mtg_http.get_card_legalities(self.http_session, card_mid)
+            html = await mtg_http.get_card_legalities(self.http_session, card_mid, set_name)
         except aiohttp.ClientError as error:
             # If Gatherer errors, omit the data for now
             # This can be appended on a case-by-case basis
@@ -286,12 +289,16 @@ class MTGJSON:
         if c_legal:
             card_info['legalities'] = c_legal
 
-    async def build_foreign_part(self, card_mid: int, card_info: mtg_global.CardDescription, second_card: bool) -> None:
+    async def build_foreign_part(self,
+                                 card_mid: int,
+                                 card_info: mtg_global.CardDescription,
+                                 second_card: bool,
+                                 set_name: str = '') -> None:
         """
         This builder builds the foreign identifiers page of gatherer
         """
         try:
-            html = await mtg_http.get_card_foreign_details(self.http_session, card_mid)
+            html = await mtg_http.get_card_foreign_details(self.http_session, card_mid, set_name)
         except aiohttp.ClientError as error:
             # If Gatherer errors, omit the data for now
             # This can be appended on a case-by-case basis
@@ -305,19 +312,20 @@ class MTGJSON:
         soup_oracle = bs4.BeautifulSoup(html, 'html.parser')
 
         # Get Card Foreign Data
-        c_foreign_info = await self.build_foreign_info(soup_oracle, second_card)
+        c_foreign_info = await self.build_foreign_info(soup_oracle, second_card, set_name)
         if c_foreign_info:
             card_info['foreignData'] = c_foreign_info
 
     async def build_original_details(self,
                                      card_mid: int,
                                      card_info: mtg_global.CardDescription,
-                                     second_card: bool = False) -> None:
+                                     second_card: bool = False,
+                                     set_name: str = '') -> None:
         """
         This builder builds the original type/text of the card. Useful for foreign languages
         and those who like the original printed text over Oracle text.
         """
-        soup_print = await self.get_card_html(card_mid, True)
+        soup_print = await self.get_card_html(card_mid, True, set_name)
 
         # Determine if Card is Normal, Flip, or Split
         div_name = self.determine_layout_and_div_name(soup_print, second_card)[1]
@@ -346,9 +354,9 @@ class MTGJSON:
         card_info['multiverseid'] = int(card_mid)
 
         await self.build_main_part(set_name, card_info, other_cards_holder, second_card=second_card)
-        await self.build_original_details(card_mid, card_info, second_card=second_card)
-        await self.build_legalities_part(card_mid, card_info)
-        await self.build_foreign_part(card_mid, card_info, second_card=second_card)
+        await self.build_original_details(card_mid, card_info, second_card=second_card, set_name=set_name[1])
+        await self.build_legalities_part(card_mid, card_info, set_name=set_name[1])
+        await self.build_foreign_part(card_mid, card_info, second_card=second_card, set_name=set_name[1])
 
         card_info['cardHash'] = mtg_parse.build_id_part(set_name, card_mid, card_info)
 
@@ -422,7 +430,7 @@ class MTGJSON:
         This will take the downloaded tokens (from the get all tokens method)
         and pull out the tokens necessary for the specific set being built
         """
-        xml = await mtg_http.get_all_tokens(self.http_session)
+        xml = await mtg_http.get_all_tokens(self.http_session, set_name[1])
 
         return_list: List[mtg_global.TokenDescription] = list()
 
@@ -706,8 +714,8 @@ def create_combined_outputs() -> None:
                 file_content.pop('mkm_name', None)
                 file_content.pop('magicCardsInfoCode', None)
 
-                set_name = file.split('.')[0]
-                all_sets_data[set_name] = file_content
+                file_set_name = str(file.split('.')[0])
+                all_sets_data[file_set_name] = file_content
         return all_sets_data
 
     def create_all_cards() -> Dict[str, mtg_global.AllCardsDescription]:

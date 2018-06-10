@@ -1,9 +1,13 @@
 import asyncio
 import itertools
+import pathlib
+import time
 from typing import Any, Dict, List, Set, Tuple, Union
 
 import aiohttp
 import bs4
+
+from mtgjson4 import mtg_storage
 
 SEARCH_URL = 'http://gatherer.wizards.com/Pages/Search/Default.aspx'
 MAIN_URL = 'http://gatherer.wizards.com/Pages/Card/Details.aspx'
@@ -17,6 +21,7 @@ SetUrlsType = List[Tuple[str, ParamsType]]
 
 async def ensure_content_downloaded(session: aiohttp.ClientSession,
                                     url_to_download: str,
+                                    set_name: str,
                                     max_retries: int = 3,
                                     **kwargs: Any) -> str:
     """
@@ -25,9 +30,23 @@ async def ensure_content_downloaded(session: aiohttp.ClientSession,
     """
     # Ensure we can read the URL and its contents
     for retry in itertools.count():
+        # First, lets see if we have a (recent) cached version
+        # The cached version will be $(URL).$(params).txt
+        cached_file = pathlib.Path(
+            pathlib.Path.joinpath(mtg_storage.MTGJSON_CACHE_DIR, set_name,
+                                  url_to_download.replace('/', '_') + '.' + str(kwargs) + '.txt'))
+        if cached_file.exists():
+            time_since_edit = time.time() - cached_file.stat().st_mtime  # NOW() - File_Mod_Time
+            if time_since_edit < mtg_storage.CACHE_TIMEOUT_SEC:
+                cache_text = mtg_storage.read_from_cache_file(cached_file)
+                return cache_text
+
+        # Second, since the cache didn't exist / wasn't valid
+        # We will download from the internet
         try:
             async with session.get(url_to_download, **kwargs) as response:
-                text = await response.text()  # type: str
+                text: str = await response.text()
+                mtg_storage.write_to_cache_file(cached_file, text)
                 return text
         except aiohttp.ClientError:
             if retry == max_retries:
@@ -36,33 +55,34 @@ async def ensure_content_downloaded(session: aiohttp.ClientSession,
     raise ValueError
 
 
-async def get_card_details(session: aiohttp.ClientSession, card_mid: int, printed: bool = False) -> str:
+async def get_card_details(session: aiohttp.ClientSession, card_mid: int, printed: bool = False,
+                           set_name: str = '') -> str:
     """
     Download the main page for a specific card_mid
     """
-    return await ensure_content_downloaded(session, MAIN_URL, params=get_params(card_mid, printed))
+    return await ensure_content_downloaded(session, MAIN_URL, set_name=set_name, params=get_params(card_mid, printed))
 
 
-async def get_card_legalities(session: aiohttp.ClientSession, card_mid: int) -> str:
+async def get_card_legalities(session: aiohttp.ClientSession, card_mid: int, set_name: str = '') -> str:
     """
     Download the legal page for a specific card_mid
     """
-    return await ensure_content_downloaded(session, LEGAL_URL, params=get_params(card_mid))
+    return await ensure_content_downloaded(session, LEGAL_URL, set_name=set_name, params=get_params(card_mid))
 
 
-async def get_card_foreign_details(session: aiohttp.ClientSession, card_mid: int) -> str:
+async def get_card_foreign_details(session: aiohttp.ClientSession, card_mid: int, set_name: str = '') -> str:
     """
     Download the foreign prints page for a specific card_mid
     """
-    return await ensure_content_downloaded(session, FOREIGN_URL, params=get_params(card_mid))
+    return await ensure_content_downloaded(session, FOREIGN_URL, set_name=set_name, params=get_params(card_mid))
 
 
-async def get_all_tokens(session: aiohttp.ClientSession) -> str:
+async def get_all_tokens(session: aiohttp.ClientSession, set_name: str = '') -> str:
     """
     Download the Tokens XML from Magic-Token
     This will be parsed in another method
     """
-    return await ensure_content_downloaded(session, TOKEN_URL)
+    return await ensure_content_downloaded(session, TOKEN_URL, set_name=set_name, params='token')
 
 
 def get_params(card_mid: int, printed: bool = False) -> ParamsType:

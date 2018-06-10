@@ -110,8 +110,9 @@ venv.bak/
 .vscode/
 
 # MTG JSON
-set_outputs/
-compiled_outputs/
+/set_outputs/
+/compiled_outputs/
 /trace.html
 /tests/test_*.yaml
 /test_results/*.xml
+/.mtgjson4_cache/
