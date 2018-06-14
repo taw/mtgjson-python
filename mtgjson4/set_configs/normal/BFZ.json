@@ -3,7 +3,7 @@
 		"name": "Battle for Zendikar",
 		"code": "BFZ",
 		"magicCardsInfoCode": "bfz",
-		"essentialMagicCode": "108",
+		 
 		"releaseDate": "2015-10-02",
 		"border": "black",
 		"type": "expansion",
@@ -11,16 +11,16 @@
 		"booster": [
 			["rare", "mythic rare"], "uncommon", "uncommon", "uncommon", "common", "common", "common", "common", "common", "common", "common", "common", "common", "common", "land", "marketing"
 		],
-		"translations": {
+		"languages": {
 			"de": "Kampf um Zendikar",
 			"fr": "La bataille de Zendikar",
 			"it": "Battaglia per Zendikar",
 			"es": "La batalla por Zendikar",
 			"pt": "Batalha por Zendikar",
 			"jp": "戦乱のゼンディカー",
-			"cn": "再战赞迪卡",
+			"cs": "再战赞迪卡",
 			"ru": "Битва за Зендикар",
-			"tw": "再戰贊迪卡",
+			"ct": "再戰贊迪卡",
 			"ko": "젠디카르 전투"
 		},
 		"mkm_name": "Battle for Zendikar",

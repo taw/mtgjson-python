@@ -1,11 +1,10 @@
 {
-  "PRODUCT_PAGE": "https://magic.wizards.com/en/products/duel-decks-merfolk-vs-goblins",
-  "SET": {
-    "name": "Duel Decks: Merfolk vs. Goblins",
-    "code": "DDT",
-    "magicCardsInfoCode": "ddt",
-    "releaseDate": "2017-11-10",
-    "type": "duel deck",
-    "border": "black"
-  }
+	"PRODUCT_PAGE": "https://magic.wizards.com/en/products/duel-decks-merfolk-vs-goblins",
+	"SET": {
+		"name": "Duel Decks: Merfolk vs. Goblins",
+		"code": "DDT",
+		"releaseDate": "2017-11-10",
+		"type": "duel deck",
+		"border": "black"
+	}
 }

@@ -18,7 +18,7 @@
 		},
 		"replace": {
 			"number": "28",
-            "layout": "split"
+						"layout": "split"
 		}
 	}, {
 		"match": {
@@ -27,7 +27,7 @@
 		},
 		"replace": {
 			"number": "29",
-            "layout": "split"
+						"layout": "split"
 		}
 	}, {
 		"match": {
