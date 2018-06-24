@@ -6,6 +6,7 @@ import time
 from typing import Iterator, List
 
 import aiohttp
+import aioprocessing
 import hanging_threads
 
 from mtgjson4 import mtg_builder, mtg_global, mtg_storage
@@ -13,8 +14,7 @@ from mtgjson4 import mtg_builder, mtg_global, mtg_storage
 THREAD_MONITOR = hanging_threads.start_monitoring()
 
 
-async def main(loop: asyncio.AbstractEventLoop, session: aiohttp.ClientSession, language_to_build: str,
-               args: dict) -> None:
+def main() -> None:
     """
     Main method that starts the entire build process
     :param args:
@@ -24,44 +24,24 @@ async def main(loop: asyncio.AbstractEventLoop, session: aiohttp.ClientSession, 
     :return:
     """
 
-    def get_next_batch_of_sets(queue: Iterator[List[str]]) -> List[List[str]]:
-        """
-        To ensure better performance, we limit the number of sets built at a time
-        to limit our memory impact. This will return the next group of sets to
-        build.
-        """
-        max_pops = int(args['max_sets_build'][0])
-
-        # User disabled this memory protection feature
-        if max_pops == 0:
-            return list(queue)
-        return list(itertools.islice(queue, max_pops))
-
     # Main Applied
     mtg_storage.ensure_set_dir_exists()
 
-    sets_queue = iter(SETS_TO_BUILD)
-    async with session:
-        # Start asyncio tasks for building each set
-        json_builder = mtg_builder.MTGJSON(SETS_TO_BUILD, session, loop)
+    async def example(queue, event, lock, set_name, all_sets_to_build):
+        await event.coro_wait()
+        async with lock:
+            json_builder = mtg_builder.MTGJSON(all_sets_to_build)
+            json_builder.build_set(set_name, 'en')
+            await queue.coro_put(None)
 
-        # We will only be building a few sets at a time, to allow for partial outputs
-        sets_to_build_now = get_next_batch_of_sets(sets_queue)
-        while sets_to_build_now:
-            # Create our builders for the few sets
-            futures = [
-                loop.create_task(json_builder.build_set(set_name, language_to_build)) for set_name in sets_to_build_now
-            ]
-
-            # Then wait until all of them are completed
-            await asyncio.wait(futures)
-
-            # Then queue up our next sets to build
-            sets_to_build_now = get_next_batch_of_sets(sets_queue)
-
-    # And we're done! :)
+    loop = asyncio.get_event_loop()
+    queue = aioprocessing.AioQueue()
+    lock = aioprocessing.AioLock()
+    event = aioprocessing.AioEvent()
+    tasks = [asyncio.ensure_future(example(queue, event, lock, set_name, SETS_TO_BUILD)) for set_name in SETS_TO_BUILD]
+    loop.run_until_complete(asyncio.wait(tasks))
+    loop.close()
     return
-
 
 if __name__ == '__main__':
     # Start by processing all arguments to the program
@@ -140,15 +120,7 @@ if __name__ == '__main__':
     # Start the build process
     start_time = time.time()
 
-    card_loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
-    # card_loop.set_debug(enabled=True)
-    card_session = aiohttp.ClientSession(
-        loop=card_loop,
-        conn_timeout=60,
-        read_timeout=60,
-        raise_for_status=True,
-        connector=aiohttp.TCPConnector(limit=200))
-    card_loop.run_until_complete(main(card_loop, card_session, lang_to_process, cl_args))
+    main()
 
     if cl_args['full_out']:
         mtg_builder.create_combined_outputs()
